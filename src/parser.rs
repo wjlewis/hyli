@@ -3,10 +3,10 @@ use std::fmt;
 
 #[derive(PartialEq)]
 pub struct Tree {
-    kind: TreeKind,
-    start: usize,
-    end: usize,
-    children: Vec<Tree>,
+    pub kind: TreeKind,
+    pub start: usize,
+    pub end: usize,
+    pub children: Vec<Tree>,
 }
 
 impl fmt::Debug for Tree {
@@ -318,15 +318,15 @@ struct CloseTag {
 
 #[derive(Debug)]
 pub struct ParseResult {
-    result: Tree,
-    errors: Vec<SyntaxError>,
+    pub result: Tree,
+    pub errors: Vec<SyntaxError>,
 }
 
 #[derive(Debug)]
 pub struct SyntaxError {
-    message: String,
-    start: usize,
-    end: usize,
+    pub message: String,
+    pub start: usize,
+    pub end: usize,
 }
 
 impl SyntaxError {
@@ -372,10 +372,6 @@ impl TreeBuilder {
 
     fn open(&mut self, kind: TreeKind, start: usize) {
         self.wip.push(BuilderItem::InProgress { kind, start });
-    }
-
-    fn insert(&mut self, tree: Tree) {
-        self.wip.push(BuilderItem::Complete { tree });
     }
 
     fn complete(&mut self, end: usize) {
