@@ -9,14 +9,16 @@ fn main() {
 <Doc title="My first doc">
     <Title>My title</Title>
 
+    <Mixed><Up></Mixed></Up>
+
     <Section ref="sec-1">First Section</Section>
 </Doc>
 "#;
 
     let result = parse(input);
     if result.errors.len() == 0 {
-        let transformed = p.process(Tree::from(result.result));
-        println!("{:#?}", transformed);
+        let transformed = p.process(Tree::from(result.tree));
+        println!("{}", transformed);
     } else {
         result.errors.iter().for_each(|error| {
             println!("{}", error.message);
@@ -32,7 +34,7 @@ fn transform_doc(_attrs: Attrs, children: Vec<Tree>) -> Tree {
             Tree::Inner {
                 tag_name: String::from("head"),
                 attrs: vec![],
-                children: vec![],
+                children: vec![Tree::Text(String::from(" "))],
             },
             Tree::Inner {
                 tag_name: String::from("body"),

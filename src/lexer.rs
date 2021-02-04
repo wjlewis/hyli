@@ -1,3 +1,4 @@
+use super::common::Span;
 use std::str::Chars;
 
 pub struct Lexer<'a> {
@@ -33,7 +34,7 @@ impl<'a> Lexer<'a> {
     fn read_inside(&mut self, hash_count: usize) -> Token {
         self.skip_whitespace();
 
-        let start = self.current_pos();
+        let mut start = self.current_pos();
         if self.peek_char().is_none() {
             return Token::eof(start);
         }
@@ -51,7 +52,17 @@ impl<'a> Lexer<'a> {
             }
         };
 
-        let end = self.current_pos();
+        let mut end = self.current_pos();
+
+        // Adjust start and end positions for quoted values (to exclude
+        // quotes).
+        if kind == TokenKind::AttrVal {
+            start += 1;
+            end -= 1;
+        } else if kind == TokenKind::UnterminatedAttrVal {
+            start += 1;
+        }
+
         Token::from_input(kind, self.input, start, end)
     }
 
@@ -224,11 +235,18 @@ fn is_name_continue(c: char) -> bool {
 pub struct Token {
     pub kind: TokenKind,
     pub text: String,
-    pub start: usize,
-    pub end: usize,
+    pub span: Span,
 }
 
 impl Token {
+    pub fn start(&self) -> usize {
+        self.span.start
+    }
+
+    pub fn end(&self) -> usize {
+        self.span.end
+    }
+
     fn new<S>(kind: TokenKind, text: S, start: usize, end: usize) -> Self
     where
         S: Into<String>,
@@ -236,8 +254,7 @@ impl Token {
         Token {
             kind,
             text: text.into(),
-            start,
-            end,
+            span: Span::new(start, end),
         }
     }
 

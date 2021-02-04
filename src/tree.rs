@@ -1,4 +1,5 @@
 use super::parser::{Tree as UTree, TreeKind as Tk};
+use std::fmt;
 
 #[derive(Debug)]
 pub enum Tree {
@@ -12,6 +13,39 @@ pub enum Tree {
 
 pub type Attrs = Vec<(String, String)>;
 
+impl fmt::Display for Tree {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Tree::*;
+
+        match self {
+            Text(text) => write!(f, "{}", text),
+            Inner {
+                tag_name,
+                attrs,
+                children,
+            } => {
+                write!(f, "<{}", tag_name)?;
+                if attrs.len() > 0 {
+                    write!(f, " ")?;
+                }
+                for attr in attrs {
+                    let (name, value) = attr;
+                    write!(f, "{}=\"{}\"", name, value)?;
+                }
+                write!(f, ">")?;
+
+                for child in children {
+                    child.fmt(f)?;
+                }
+
+                write!(f, "</{}>", tag_name)?;
+
+                Ok(())
+            }
+        }
+    }
+}
+
 impl From<UTree> for Tree {
     fn from(tree: UTree) -> Self {
         match tree.kind {
@@ -24,16 +58,13 @@ impl From<UTree> for Tree {
 fn parse_doc(mut tree: UTree) -> Tree {
     assert_eq!(tree.kind, Tk::Document);
 
-    let inner = tree.children.pop().expect("expected single child");
-    parse_inner(inner)
-}
+    let inner = tree.children.pop().expect("expected child");
 
-fn parse_node(tree: UTree) -> Tree {
-    match tree.kind {
-        Tk::InnerNode => parse_inner(tree),
-        Tk::TextNode(content) => Tree::Text(content),
-        _ => panic!("expected inner node or text"),
+    if tree.children.len() > 0 {
+        panic!("expected single child")
     }
+
+    parse_inner(inner)
 }
 
 fn parse_inner(mut tree: UTree) -> Tree {
@@ -54,6 +85,14 @@ fn parse_inner(mut tree: UTree) -> Tree {
         tag_name: open_tag.name,
         attrs: open_tag.attrs,
         children,
+    }
+}
+
+fn parse_node(tree: UTree) -> Tree {
+    match tree.kind {
+        Tk::InnerNode => parse_inner(tree),
+        Tk::TextNode(content) => Tree::Text(content),
+        _ => panic!("expected inner node or text"),
     }
 }
 
