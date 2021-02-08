@@ -2,7 +2,7 @@ use super::common::Span;
 use std::str::Chars;
 
 pub struct Lexer<'a> {
-    input: &'a str,
+    pub input: &'a str,
     chars: Chars<'a>,
     mode: LexerMode,
     buffer: Option<Token>,

@@ -1,6 +1,9 @@
+mod syntax_error;
+
 use super::common::Span;
 use super::lexer::{Lexer, TokenKind as Tk};
 use std::fmt;
+use syntax_error::SyntaxError;
 
 #[derive(PartialEq)]
 pub struct Tree {
@@ -51,14 +54,15 @@ pub fn parse<'a>(input: &'a str) -> ParseResult {
     builder.take()
 }
 
-fn parse_document(builder: &mut TreeBuilder, tokens: &mut Lexer) {
+fn parse_document<'a>(builder: &mut TreeBuilder<'a>, tokens: &mut Lexer<'a>) {
+    let input = tokens.input;
     builder.open(TreeKind::Document, tokens.peek().start());
     loop {
         let peek = tokens.peek();
         match peek.kind {
             Tk::LAngle => break,
             Tk::Eof => {
-                builder.add_error(SyntaxError::new(peek.span, "unexpected EOF"));
+                builder.add_error(SyntaxError::new(input, peek.span, "unexpected EOF"));
                 builder.complete(peek.start());
                 return;
             }
@@ -83,7 +87,8 @@ fn parse_document(builder: &mut TreeBuilder, tokens: &mut Lexer) {
     builder.complete(tokens.peek().start());
 }
 
-fn parse_nodes(builder: &mut TreeBuilder, tokens: &mut Lexer) {
+fn parse_nodes<'a>(builder: &mut TreeBuilder<'a>, tokens: &mut Lexer<'a>) {
+    let input = tokens.input;
     loop {
         let peek = tokens.peek();
         match peek.kind {
@@ -92,6 +97,7 @@ fn parse_nodes(builder: &mut TreeBuilder, tokens: &mut Lexer) {
             Tk::Text => parse_text_node(builder, tokens),
             _ => {
                 builder.add_error(SyntaxError::new(
+                    input,
                     peek.span,
                     format!(r#"expected '<', "</", or text, but found "{}""#, peek.text),
                 ));
@@ -101,7 +107,8 @@ fn parse_nodes(builder: &mut TreeBuilder, tokens: &mut Lexer) {
     }
 }
 
-fn parse_inner_node(builder: &mut TreeBuilder, tokens: &mut Lexer) {
+fn parse_inner_node<'a>(builder: &mut TreeBuilder<'a>, tokens: &mut Lexer<'a>) {
+    let input = tokens.input;
     builder.open(TreeKind::InnerNode, tokens.peek().start());
     let open_tag_name = parse_open_tag(builder, tokens);
     parse_nodes(builder, tokens);
@@ -110,6 +117,7 @@ fn parse_inner_node(builder: &mut TreeBuilder, tokens: &mut Lexer) {
     if peek.kind == Tk::Eof {
         builder.complete(peek.start());
         builder.add_error(SyntaxError::new(
+            input,
             peek.span,
             "expected closing tag, but found EOF",
         ));
@@ -122,6 +130,7 @@ fn parse_inner_node(builder: &mut TreeBuilder, tokens: &mut Lexer) {
     match (open_tag_name, close_tag) {
         (Some(open), Some(CloseTag { name, span })) if open != name => {
             builder.add_error(SyntaxError::new(
+                tokens.input,
                 span,
                 format!(
                     r#"closing tag must match opening (expected "{}" but found "{}")"#,
@@ -138,7 +147,8 @@ fn parse_text_node(builder: &mut TreeBuilder, tokens: &mut Lexer) {
     builder.add_leaf(TreeKind::TextNode(text.text), text.span);
 }
 
-fn parse_open_tag(builder: &mut TreeBuilder, tokens: &mut Lexer) -> Option<String> {
+fn parse_open_tag<'a>(builder: &mut TreeBuilder<'a>, tokens: &mut Lexer<'a>) -> Option<String> {
+    let input = tokens.input;
     let mut tag_name = None;
     let langle = tokens.pop();
     builder.open(TreeKind::OpenTag, langle.start());
@@ -151,10 +161,11 @@ fn parse_open_tag(builder: &mut TreeBuilder, tokens: &mut Lexer) -> Option<Strin
             builder.add_leaf(TreeKind::TagName(name.text), name.span);
         }
         Tk::Equals | Tk::AttrVal | Tk::RAngle => {
-            builder.add_error(SyntaxError::new(peek.span, "expected tag name"));
+            builder.add_error(SyntaxError::new(input, peek.span, "expected tag name"));
         }
         _ => {
             builder.add_error(SyntaxError::new(
+                input,
                 peek.span,
                 "expected tag name, followed by attributes and '>'",
             ));
@@ -172,7 +183,7 @@ fn parse_open_tag(builder: &mut TreeBuilder, tokens: &mut Lexer) -> Option<Strin
             tokens.pop();
         }
         _ => {
-            builder.add_error(SyntaxError::new(peek.span, "expected '>'"));
+            builder.add_error(SyntaxError::new(input, peek.span, "expected '>'"));
             builder.complete(peek.start());
             return tag_name;
         }
@@ -182,14 +193,19 @@ fn parse_open_tag(builder: &mut TreeBuilder, tokens: &mut Lexer) -> Option<Strin
     tag_name
 }
 
-fn parse_close_tag(builder: &mut TreeBuilder, tokens: &mut Lexer) -> Option<CloseTag> {
+fn parse_close_tag<'a>(builder: &mut TreeBuilder<'a>, tokens: &mut Lexer<'a>) -> Option<CloseTag> {
+    let input = tokens.input;
     let mut tag_info = None;
     let langle_slash = tokens.pop();
     builder.open(TreeKind::CloseTag, langle_slash.start());
 
     if tokens.peek().kind == Tk::OrphanHashes {
         let orphans = tokens.pop();
-        builder.add_error(SyntaxError::new(orphans.span, "orphaned hashes"));
+        builder.add_error(SyntaxError::new(
+            tokens.input,
+            orphans.span,
+            "orphaned hashes",
+        ));
     }
 
     let peek = tokens.peek();
@@ -203,10 +219,11 @@ fn parse_close_tag(builder: &mut TreeBuilder, tokens: &mut Lexer) -> Option<Clos
             builder.add_leaf(TreeKind::TagName(name.text), name.span);
         }
         Tk::RAngle => {
-            builder.add_error(SyntaxError::new(peek.span, "expected tag name"));
+            builder.add_error(SyntaxError::new(input, peek.span, "expected tag name"));
         }
         _ => {
             builder.add_error(SyntaxError::new(
+                input,
                 peek.span,
                 "expected tag name, followed by '>'",
             ));
@@ -222,7 +239,7 @@ fn parse_close_tag(builder: &mut TreeBuilder, tokens: &mut Lexer) -> Option<Clos
             tokens.pop();
         }
         _ => {
-            builder.add_error(SyntaxError::new(peek.span, "expected '>'"));
+            builder.add_error(SyntaxError::new(input, peek.span, "expected '>'"));
             builder.complete(peek.start());
             return tag_info;
         }
@@ -232,7 +249,7 @@ fn parse_close_tag(builder: &mut TreeBuilder, tokens: &mut Lexer) -> Option<Clos
     tag_info
 }
 
-fn parse_attrs(builder: &mut TreeBuilder, tokens: &mut Lexer) {
+fn parse_attrs<'a>(builder: &mut TreeBuilder<'a>, tokens: &mut Lexer<'a>) {
     builder.open(TreeKind::Attrs, tokens.peek().start());
 
     while tokens.peek().kind == Tk::Name {
@@ -242,7 +259,8 @@ fn parse_attrs(builder: &mut TreeBuilder, tokens: &mut Lexer) {
     builder.complete(tokens.peek().start());
 }
 
-fn parse_attr(builder: &mut TreeBuilder, tokens: &mut Lexer) {
+fn parse_attr<'a>(builder: &mut TreeBuilder<'a>, tokens: &mut Lexer<'a>) {
+    let input = tokens.input;
     let name = tokens.pop();
     builder.open(TreeKind::Attr, name.start());
     builder.add_leaf(TreeKind::AttrName(name.text), name.span);
@@ -253,10 +271,11 @@ fn parse_attr(builder: &mut TreeBuilder, tokens: &mut Lexer) {
             tokens.pop();
         }
         Tk::AttrVal | Tk::UnterminatedAttrVal => {
-            builder.add_error(SyntaxError::new(peek.span, "expected '='"));
+            builder.add_error(SyntaxError::new(input, peek.span, "expected '='"));
         }
         _ => {
             builder.add_error(SyntaxError::new(
+                input,
                 peek.span,
                 "expected '=', followed by attribute value",
             ));
@@ -270,14 +289,22 @@ fn parse_attr(builder: &mut TreeBuilder, tokens: &mut Lexer) {
     match peek.kind {
         Tk::AttrVal | Tk::UnterminatedAttrVal => {
             if peek.kind == Tk::UnterminatedAttrVal {
-                builder.add_error(SyntaxError::new(peek.span, "unterminated attribute value"));
+                builder.add_error(SyntaxError::new(
+                    input,
+                    peek.span,
+                    "unterminated attribute value",
+                ));
             }
 
             let attr_val = tokens.pop();
             builder.add_leaf(TreeKind::AttrVal(attr_val.text), attr_val.span);
         }
         _ => {
-            builder.add_error(SyntaxError::new(peek.span, "expected attribute value"));
+            builder.add_error(SyntaxError::new(
+                input,
+                peek.span,
+                "expected attribute value",
+            ));
             builder.complete(peek.start());
             return;
         }
@@ -292,35 +319,17 @@ struct CloseTag {
 }
 
 #[derive(Debug)]
-pub struct ParseResult {
+pub struct ParseResult<'a> {
     pub tree: Tree,
-    pub errors: Vec<SyntaxError>,
+    pub errors: Vec<SyntaxError<'a>>,
 }
 
-#[derive(Debug)]
-pub struct SyntaxError {
-    pub span: Span,
-    pub message: String,
-}
-
-impl SyntaxError {
-    fn new<S>(span: Span, message: S) -> Self
-    where
-        S: Into<String>,
-    {
-        SyntaxError {
-            span,
-            message: message.into(),
-        }
-    }
-}
-
-struct TreeBuilder {
+struct TreeBuilder<'a> {
     wip: Vec<BuilderItem>,
-    errors: Vec<SyntaxError>,
+    errors: Vec<SyntaxError<'a>>,
 }
 
-impl TreeBuilder {
+impl<'a> TreeBuilder<'a> {
     fn new() -> Self {
         TreeBuilder {
             wip: vec![],
@@ -328,7 +337,7 @@ impl TreeBuilder {
         }
     }
 
-    fn take(mut self) -> ParseResult {
+    fn take(mut self) -> ParseResult<'a> {
         use BuilderItem::*;
         let item = self.wip.pop().expect("no tree to take");
 
@@ -382,7 +391,7 @@ impl TreeBuilder {
         panic!("no open item to complete");
     }
 
-    fn add_error(&mut self, error: SyntaxError) {
+    fn add_error(&mut self, error: SyntaxError<'a>) {
         self.errors.push(error);
     }
 }
