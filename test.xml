@@ -1,0 +1,25 @@
+<Doc>
+  <Title>My first doc</Title>
+
+  <Section ref="sec-1">
+    <CodeListing.Racket>
+(define (map f xs)
+  (if (empty? xs)
+      '()
+      (cons (f (car xs))
+            (map f (cdr xs)))))
+
+(map (lambda (x) (* x x)) '(1 2 3 4 5))
+    </CodeListing.Racket>
+  </Section>
+
+  <Section ref="sec-2">
+    Here's how things look:
+
+    <CodeListing.Hyli ##>
+<Doc>
+  <Title>My first doc</Title>
+</Doc>
+    </## CodeListing.Hyli>
+  </Section>
+</Doc>

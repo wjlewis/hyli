@@ -1,8 +1,8 @@
-use super::common::Span;
+use super::common::{Span, FILE_INFO};
 use std::str::Chars;
 
 pub struct Lexer<'a> {
-    pub input: &'a str,
+    input_len: usize,
     chars: Chars<'a>,
     mode: LexerMode,
     buffer: Option<Token>,
@@ -63,7 +63,7 @@ impl<'a> Lexer<'a> {
             start += 1;
         }
 
-        Token::from_input(kind, self.input, start, end)
+        Token::new(kind, start, end)
     }
 
     fn read_langle(&mut self, hash_count: usize) -> TokenKind {
@@ -158,7 +158,7 @@ impl<'a> Lexer<'a> {
 
         self.mode = LexerMode::Inside(hash_count);
         if end > start {
-            Token::from_input(TokenKind::Text, self.input, start, end)
+            Token::new(TokenKind::Text, start, end)
         } else {
             self.read_next()
         }
@@ -186,7 +186,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn current_pos(&self) -> usize {
-        self.input.len() - self.chars.as_str().len()
+        self.input_len - self.chars.as_str().len()
     }
 
     fn peek_char(&self) -> Option<char> {
@@ -201,7 +201,7 @@ impl<'a> Lexer<'a> {
 impl<'a> From<&'a str> for Lexer<'a> {
     fn from(input: &'a str) -> Self {
         Lexer {
-            input,
+            input_len: input.len(),
             chars: input.chars(),
             mode: LexerMode::Outside(0),
             buffer: None,
@@ -234,7 +234,6 @@ fn is_name_continue(c: char) -> bool {
 #[derive(Debug)]
 pub struct Token {
     pub kind: TokenKind,
-    pub text: String,
     pub span: Span,
 }
 
@@ -247,23 +246,22 @@ impl Token {
         self.span.end
     }
 
-    fn new<S>(kind: TokenKind, text: S, start: usize, end: usize) -> Self
-    where
-        S: Into<String>,
-    {
+    pub fn text(&self) -> String {
+        FILE_INFO.with(|info| {
+            let info = info.borrow();
+            String::from(&info.text[self.span.start..self.span.end])
+        })
+    }
+
+    fn new(kind: TokenKind, start: usize, end: usize) -> Self {
         Token {
             kind,
-            text: text.into(),
             span: Span::new(start, end),
         }
     }
 
-    fn from_input(kind: TokenKind, input: &str, start: usize, end: usize) -> Self {
-        Token::new(kind, &input[start..end], start, end)
-    }
-
     fn eof(pos: usize) -> Self {
-        Token::new(TokenKind::Eof, "", pos, pos)
+        Token::new(TokenKind::Eof, pos, pos)
     }
 }
 

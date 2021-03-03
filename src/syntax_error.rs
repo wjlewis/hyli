@@ -1,43 +1,45 @@
-use crate::common::Span;
+use crate::common::{Span, FILE_INFO};
 use std::fmt;
 
 #[derive(Debug)]
-pub struct SyntaxError<'a> {
-    pub source: &'a str,
+pub struct SyntaxError {
     pub span: Span,
     pub message: String,
 }
 
-impl<'a> SyntaxError<'a> {
-    pub fn new<S>(source: &'a str, span: Span, message: S) -> Self
+impl SyntaxError {
+    pub fn new<S>(span: Span, message: S) -> Self
     where
         S: Into<String>,
     {
         SyntaxError {
-            source,
             span,
             message: message.into(),
         }
     }
 }
 
-impl<'a> fmt::Display for SyntaxError<'a> {
+impl fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Span { start, end } = self.span;
-        let start_line = pos_to_line(start, self.source);
-        let end_line = pos_to_line(end, self.source);
-        let lines = self
-            .source
-            .lines()
-            .skip(start_line - 1)
-            .take(end_line + 1 - start_line);
+        FILE_INFO.with(|info| {
+            let info = info.borrow();
+            let text = &info.text;
 
-        for line in lines {
-            writeln!(f, "{}", line)?;
-            write!(f, " ^^^^^")?;
-        }
+            let Span { start, end } = self.span;
+            let start_line = pos_to_line(start, text);
+            let end_line = pos_to_line(end, text);
+            let lines = text
+                .lines()
+                .skip(start_line - 1)
+                .take(end_line + 1 - start_line);
 
-        Ok(())
+            for line in lines {
+                writeln!(f, "{}", line)?;
+                write!(f, " ^^^^^")?;
+            }
+
+            Ok(())
+        })
     }
 }
 
